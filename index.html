@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+a<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -229,7 +229,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;}
 </div>
 
 <!-- APP (hidden until login) -->
-<div id="app-wrapper" style="display:none;flex-direction:column;height:100%;">
+<div id="app-wrapper" style="display:none;">
 
 <div class="nav">
   <div class="nav-title">推し活・趣味 家計簿</div>
@@ -269,7 +269,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;}
   </div>
 
   <div class="card" id="home-alerts">
-    <div class="card-header">支払い期限のお知らせ</div>
+    <div class="card-header">分割払いの進捗</div>
     <div class="card-body" id="home-alert-list">
       <div style="font-size:13px;color:var(--text-muted)">期限が迫っている支払いはありません</div>
     </div>
@@ -313,6 +313,16 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;}
           <input type="date" id="i-date">
         </div>
       </div>
+      <div class="row2">
+        <div class="field">
+          <label>発売日（任意）</label>
+          <input type="date" id="i-release">
+        </div>
+        <div class="field">
+          <label>メモ（任意）</label>
+          <input type="text" id="i-memo" placeholder="ポイント使用 など">
+        </div>
+      </div>
     </div>
   </div>
 
@@ -327,6 +337,11 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;}
           <option value="revo">リボ払い</option>
         </select>
       </div>
+      <div class="field">
+        <label>支払い開始月</label>
+        <input type="month" id="i-paystart" oninput="calcMonthly()">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">予約購入など、今月以外から支払いが始まる場合に設定してください</div>
+      </div>
       <div class="installment-box" id="install-box">
         <div class="row2">
           <div>
@@ -338,35 +353,13 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;}
             <div class="monthly-calc" id="monthly-calc" style="padding:9px 0;font-size:15px;font-weight:600;color:var(--primary-dark);">¥0</div>
           </div>
         </div>
+        <div id="install-schedule-preview" style="margin-top:8px;font-size:12px;color:var(--primary-dark);background:var(--card);padding:8px;border-radius:6px;"></div>
       </div>
       <div class="installment-box show" id="revo-box" style="display:none !important;">
         <div class="field" style="margin:0">
           <label style="color:var(--primary-dark)">月々の支払額（円）</label>
           <input type="number" id="i-revo" placeholder="5000" style="border-color:var(--primary);">
         </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">支払い期限</div>
-    <div class="card-body">
-      <div class="field">
-        <label>期限日</label>
-        <input type="date" id="i-deadline" onchange="renderDeadlinePreview()">
-      </div>
-      <div id="deadline-preview" class="deadline-vis" style="display:none">
-        <div class="deadline-label-row">
-          <span id="dl-label-left" style="font-size:12px;color:var(--text-muted)"></span>
-          <span id="dl-label-right" style="font-size:12px;font-weight:500"></span>
-        </div>
-        <div class="deadline-bar-track">
-          <div class="deadline-bar-fill" id="dl-bar-fill"></div>
-        </div>
-      </div>
-      <div class="field" style="margin-top:12px;">
-        <label>メモ（任意）</label>
-        <input type="text" id="i-memo" placeholder="クレカ引き落とし、ポイント使用 など">
       </div>
     </div>
   </div>
@@ -570,410 +563,433 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;}
 </div><!-- /app-wrapper -->
 
 <script>
-/* ======================================
-   AUTH  (初期パスワード: oshi2024)
-   パスワード変更は設定タブから行えます
-   ====================================== */
+/* ============================================================
+   AUTH  初期パスワード: oshi2024
+   設定タブでパスワード変更できます
+   ============================================================ */
 const PASS_HASH = '57ffa9b47cfd9ca690e1e49dbb2ed8c3d763aa58c15ed5e8dad671ba49e2ee3f';
-const SESSION_MS = 60 * 60 * 1000;
+const SESSION_MS = 60 * 60 * 1000; // 1時間
 
-async function sha256(str){
-  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
-  return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2,'0')).join('');
 }
-function isSessionValid(){
-  try{const t=parseInt(localStorage.getItem('kakeibo_session_ts')||'0');return Date.now()-t<SESSION_MS;}catch{return false;}
-}
-function startSession(){localStorage.setItem('kakeibo_session_ts',Date.now().toString());}
 
-function showApp(){
-  document.getElementById('login-screen').style.display='none';
-  const app=document.getElementById('app-wrapper');
-  app.style.display='flex';app.style.flexDirection='column';app.style.height='100%';
+function isSessionValid() {
+  try {
+    const t = parseInt(localStorage.getItem('kakeibo_session_ts') || '0');
+    return Date.now() - t < SESSION_MS;
+  } catch { return false; }
+}
+
+function startSession() {
+  localStorage.setItem('kakeibo_session_ts', Date.now().toString());
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-wrapper').style.cssText = 'display:flex;flex-direction:column;height:100%;';
   initApp();
 }
-async function doLogin(){
-  const pw=document.getElementById('pw-input').value;
-  const errEl=document.getElementById('login-error');
-  if(!pw){errEl.textContent='パスワードを入力してください';return;}
-  errEl.textContent='確認中...';
-  const hash=await sha256(pw);
-  const stored=localStorage.getItem('kakeibo_custom_hash')||PASS_HASH;
-  if(hash===stored){startSession();showApp();}
-  else{errEl.textContent='パスワードが違います';document.getElementById('pw-input').value='';document.getElementById('pw-input').focus();}
-}
-setInterval(()=>{
-  if(!isSessionValid()&&document.getElementById('app-wrapper').style.display!=='none'){
-    localStorage.removeItem('kakeibo_session_ts');
-    document.getElementById('app-wrapper').style.display='none';
-    document.getElementById('login-screen').style.display='flex';
-    document.getElementById('login-error').textContent='セッションが切れました。再度ログインしてください。';
+
+async function doLogin() {
+  const pw = document.getElementById('pw-input').value;
+  const errEl = document.getElementById('login-error');
+  if (!pw) { errEl.textContent = 'パスワードを入力してください'; return; }
+  errEl.textContent = '確認中...';
+  try {
+    const hash = await sha256(pw);
+    const stored = localStorage.getItem('kakeibo_custom_hash') || PASS_HASH;
+    if (hash === stored) {
+      startSession();
+      showApp();
+    } else {
+      errEl.textContent = 'パスワードが違います';
+      document.getElementById('pw-input').value = '';
+      document.getElementById('pw-input').focus();
+    }
+  } catch(e) {
+    errEl.textContent = 'エラーが発生しました: ' + e.message;
   }
-},5*60*1000);
+}
 
-/* ====================================
-   APP — 全関数はグローバルスコープ
-   ==================================== */
-const CAT_ICONS={'フィギュア':'🗿','漫画':'📚','プラモデル':'🤖','ゲーム':'🎮','アニメ':'📺','グッズ':'🎁','同人誌':'📖','トレカ':'🃏','コスプレ':'👘','その他':'📦'};
-const CHART_COLORS=['#7F77DD','#1D9E75','#BA7517','#D4537E','#378ADD','#D85A30','#639922','#888780'];
+// セッション切れチェック（5分ごと）
+setInterval(() => {
+  const app = document.getElementById('app-wrapper');
+  if (app.style.display !== 'none' && !isSessionValid()) {
+    localStorage.removeItem('kakeibo_session_ts');
+    app.style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('login-error').textContent = 'セッションが切れました。再度ログインしてください。';
+  }
+}, 5 * 60 * 1000);
 
-function ls(k,d){try{const v=localStorage.getItem(k);return v!==null?JSON.parse(v):d;}catch{return d;}}
-function lss(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
+/* ============================================================
+   APP GLOBALS
+   ============================================================ */
+const CAT_ICONS = {
+  'フィギュア':'🗿','漫画':'📚','プラモデル':'🤖','ゲーム':'🎮',
+  'アニメ':'📺','グッズ':'🎁','同人誌':'📖','トレカ':'🃏',
+  'コスプレ':'👘','その他':'📦'
+};
+const CHART_COLORS = ['#7F77DD','#1D9E75','#BA7517','#D4537E','#378ADD','#D85A30','#639922','#888780'];
 
-let purchases,settings,categories,sites,catChart,trendChart;
+function ls(k, d) {
+  try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : d; }
+  catch { return d; }
+}
+function lss(k, v) {
+  try { localStorage.setItem(k, JSON.stringify(v)); } catch {}
+}
 
-function initApp(){
-  purchases = ls('kakeibo_purchases',[]);
-  settings  = ls('kakeibo_settings',{budget:0,notif:true,notif7:true,notif1:true,notifBudget:true});
-  categories= ls('kakeibo_cats',['フィギュア','漫画','プラモデル','ゲーム','アニメ','グッズ','同人誌','トレカ','コスプレ','その他']);
-  sites     = ls('kakeibo_sites',['Amazon','楽天市場','Yahoo!ショッピング','メルカリ','駿河屋','あみあみ','ホビーサーチ','ヨドバシ.com','Booth','コミケ・イベント','実店舗','その他']);
-  catChart=null; trendChart=null;
-  document.getElementById('i-date').value=today();
+let purchases, settings, categories, sites, catChart, trendChart;
+
+function initApp() {
+  purchases  = ls('kakeibo_purchases', []);
+  settings   = ls('kakeibo_settings', {budget:0, notif:true, notif7:true, notif1:true, notifBudget:true});
+  categories = ls('kakeibo_cats', ['フィギュア','漫画','プラモデル','ゲーム','アニメ','グッズ','同人誌','トレカ','コスプレ','その他']);
+  sites      = ls('kakeibo_sites', ['Amazon','楽天市場','Yahoo!ショッピング','メルカリ','駿河屋','あみあみ','ホビーサーチ','ヨドバシ.com','Booth','コミケ・イベント','実店舗','その他']);
+  catChart = null; trendChart = null;
+  document.getElementById('i-date').value = today();
   populateSelects();
   renderHome();
   requestNotifPermission();
   checkNotifications();
-  setInterval(checkNotifications,1000*60*60);
+  setInterval(checkNotifications, 60 * 60 * 1000);
 }
 
-function save(){lss('kakeibo_purchases',purchases);}
-function saveSettings(){
-  settings.notif=document.getElementById('notif-toggle').checked;
-  settings.notif7=document.getElementById('notif-7').checked;
-  settings.notif1=document.getElementById('notif-1').checked;
-  settings.notifBudget=document.getElementById('notif-budget').checked;
-  lss('kakeibo_settings',settings);
-  toast('設定を保存しました');
-}
-function saveBudget(){
-  settings.budget=parseInt(document.getElementById('s-budget').value)||0;
-  lss('kakeibo_settings',settings);
-  renderHome();
-  toast('予算を保存しました');
+function save() { lss('kakeibo_purchases', purchases); }
+
+/* ---- ユーティリティ ---- */
+function today() { return new Date().toISOString().split('T')[0]; }
+function thisMonth() { return new Date().toISOString().slice(0, 7); }
+function fmt(n) { return '¥' + (Math.round(n) || 0).toLocaleString('ja-JP'); }
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr); d.setHours(0,0,0,0);
+  const n = new Date(); n.setHours(0,0,0,0);
+  return Math.ceil((d - n) / (1000 * 60 * 60 * 24));
 }
 
-function toast(msg){
-  const t=document.getElementById('toast');
-  t.textContent=msg;t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2200);
-}
-
-function goTab(tab){
-  document.querySelectorAll('.nav-tab').forEach((b,i)=>{
-    b.classList.toggle('active',['home','input','list','stats','settings'][i]===tab);
-  });
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.getElementById('panel-'+tab).classList.add('active');
-  if(tab==='home')renderHome();
-  if(tab==='list'){populateFilters();renderList();}
-  if(tab==='stats'){populateStatsFilter();renderStats();}
-  if(tab==='settings')renderSettings();
-}
-
-function today(){return new Date().toISOString().split('T')[0];}
-function thisMonth(){return new Date().toISOString().slice(0,7);}
-
-function daysUntil(dateStr){
-  if(!dateStr)return null;
-  const d=new Date(dateStr);d.setHours(0,0,0,0);
-  const n=new Date();n.setHours(0,0,0,0);
-  return Math.ceil((d-n)/(1000*60*60*24));
-}
-
-function deadlineChip(days){
-  if(days===null)return '';
-  if(days<0)return `<span class="chip chip-red">期限超過 ${Math.abs(days)}日</span>`;
-  if(days===0)return `<span class="chip chip-red">本日期限</span>`;
-  if(days<=7)return `<span class="chip chip-amber">残${days}日</span>`;
+function deadlineChip(days) {
+  if (days === null) return '';
+  if (days < 0)  return `<span class="chip chip-red">期限超過${Math.abs(days)}日</span>`;
+  if (days === 0) return `<span class="chip chip-red">本日期限</span>`;
+  if (days <= 7) return `<span class="chip chip-amber">残${days}日</span>`;
   return `<span class="chip chip-green">残${days}日</span>`;
 }
 
-function payLabel(p){
-  if(p.payType==='lump')return '一括払い';
-  if(p.payType==='install'){
-    const paidN=installPaidCount(p);
-    return `${p.installCount}回分割（${paidN}/${p.installCount}回済）`;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function goTab(tab) {
+  document.querySelectorAll('.nav-tab').forEach((b, i) => {
+    b.classList.toggle('active', ['home','input','list','stats','settings'][i] === tab);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + tab).classList.add('active');
+  if (tab === 'home') renderHome();
+  if (tab === 'list') { populateFilters(); renderList(); }
+  if (tab === 'stats') { populateStatsFilter(); renderStats(); }
+  if (tab === 'settings') renderSettings();
+}
+
+/* ---- 分割払いヘルパー ---- */
+function installPaidCount(p) { return (p.installPaid || []).filter(Boolean).length; }
+function installRemaining(p) { return p.installCount - installPaidCount(p); }
+function installAllDone(p)   { return installPaidCount(p) >= p.installCount; }
+
+function payLabel(p) {
+  if (p.payType === 'lump') return '一括払い';
+  if (p.payType === 'install') {
+    const n = installPaidCount(p);
+    return `${p.installCount}回分割（${n}/${p.installCount}回済）`;
   }
   return 'リボ払い';
 }
 
-function monthlyAmt(p){
-  if(p.payType==='lump')return p.price;
-  if(p.payType==='install')return Math.round(p.price/p.installCount);
-  return p.revoAmt||0;
+function monthlyAmt(p) {
+  if (p.payType === 'lump') return p.price;
+  if (p.payType === 'install') return Math.round(p.price / p.installCount);
+  return p.revoAmt || 0;
 }
 
-function installPaidCount(p){
-  return (p.installPaid||[]).filter(Boolean).length;
-}
-function installRemaining(p){
-  return p.installCount - installPaidCount(p);
-}
-function installAllDone(p){
-  return installPaidCount(p)>=p.installCount;
+function installIndexForMonth(p, ym) {
+  const start = p.paystart || (p.date || thisMonth()).slice(0,7);
+  const [sy, sm] = start.split('-').map(Number);
+  const [ty, tm] = ym.split('-').map(Number);
+  return (ty - sy) * 12 + (tm - sm);
 }
 
-function thisMonthPlan(){
-  const ym=thisMonth();
-  let total=0;
-  purchases.forEach(p=>{
-    if(!p.deadline)return;
-    const deadYm=p.deadline.slice(0,7);
-    if(p.payType==='lump'&&deadYm===ym&&!p.paid)total+=p.price;
-    else if(p.payType==='install'&&installRemaining(p)>0)total+=Math.round(p.price/p.installCount);
-    else if(p.payType==='revo'&&!p.paid)total+=p.revoAmt||0;
-  });
-  return total;
-}
-
-function thisMonthPaid(){
-  const ym=thisMonth();
-  let total=0;
-  purchases.forEach(p=>{
-    if((p.date||'').slice(0,7)!==ym)return;
-    if(p.payType==='install'){
-      total+=installPaidCount(p)*Math.round(p.price/p.installCount);
-    } else if(p.paid){
-      total+=p.price;
+/* ---- 月間集計 ---- */
+function thisMonthPlan() {
+  const ym = thisMonth();
+  let total = 0;
+  purchases.forEach(p => {
+    if (p.payType === 'lump') {
+      const deadYm = (p.deadline || '').slice(0,7);
+      if (deadYm === ym && !p.paid) total += p.price;
+    } else if (p.payType === 'install') {
+      const idx = installIndexForMonth(p, ym);
+      if (idx >= 0 && idx < p.installCount && !(p.installPaid || [])[idx])
+        total += Math.round(p.price / p.installCount);
+    } else if (p.payType === 'revo' && !p.paid) {
+      const start = p.paystart || (p.date || thisMonth()).slice(0,7);
+      if (ym >= start) total += p.revoAmt || 0;
     }
   });
   return total;
 }
 
-function fmt(n){return '¥'+(Math.round(n)||0).toLocaleString('ja-JP');}
+function thisMonthPaid() {
+  const ym = thisMonth();
+  let total = 0;
+  purchases.forEach(p => {
+    if (p.payType === 'install') {
+      const idx = installIndexForMonth(p, ym);
+      if (idx >= 0 && idx < p.installCount && (p.installPaid || [])[idx])
+        total += Math.round(p.price / p.installCount);
+    } else if ((p.date || '').slice(0,7) === ym && p.paid) {
+      total += p.price;
+    }
+  });
+  return total;
+}
 
-/* ---- HOME ---- */
-function renderHome(){
-  const plan=thisMonthPlan();
-  const paid=thisMonthPaid();
-  document.getElementById('h-plan').textContent=fmt(plan);
-  document.getElementById('h-paid').textContent=fmt(paid);
-  document.getElementById('h-paid-sub').textContent=`未払い: ${fmt(Math.max(0,plan-paid))}`;
+/* ---- ホーム ---- */
+function renderHome() {
+  const plan = thisMonthPlan();
+  const paid = thisMonthPaid();
+  document.getElementById('h-plan').textContent = fmt(plan);
+  document.getElementById('h-paid').textContent = fmt(paid);
+  document.getElementById('h-paid-sub').textContent = `未払い: ${fmt(Math.max(0, plan - paid))}`;
 
-  const budget=settings.budget||0;
-  if(budget>0){
-    const pct=Math.min(Math.round(plan/budget*100),100);
-    const bar=document.getElementById('h-budget-bar');
-    bar.style.width=pct+'%';
-    bar.className='budget-fill'+(plan>=budget?' over':plan>=budget*.8?' warn':'');
-    document.getElementById('h-budget-val').innerHTML=`${fmt(plan)} / <span id="h-budget-max">${fmt(budget)}</span>`;
-    document.getElementById('h-budget-pct').textContent=pct+'%';
-    document.getElementById('h-budget-max').textContent=fmt(budget);
+  const budget = settings.budget || 0;
+  const bar = document.getElementById('h-budget-bar');
+  if (budget > 0) {
+    const pct = Math.min(Math.round(plan / budget * 100), 100);
+    bar.style.width = pct + '%';
+    bar.className = 'budget-fill' + (plan >= budget ? ' over' : plan >= budget * .8 ? ' warn' : '');
+    document.getElementById('h-budget-val').innerHTML = `${fmt(plan)} / <span id="h-budget-max">${fmt(budget)}</span>`;
+    document.getElementById('h-budget-pct').textContent = pct + '%';
   } else {
-    document.getElementById('h-budget-val').innerHTML=`${fmt(plan)} / <span style="color:var(--text-hint)">未設定</span>`;
-    document.getElementById('h-budget-pct').textContent='';
-    document.getElementById('h-budget-bar').style.width='0%';
+    bar.style.width = '0%';
+    document.getElementById('h-budget-val').innerHTML = `${fmt(plan)} / <span style="color:var(--text-hint)">未設定</span>`;
+    document.getElementById('h-budget-pct').textContent = '';
   }
 
-  const alerts=purchases.filter(p=>{
-    const d=daysUntil(p.deadline);
-    return d!==null&&d<=7&&!p.paid;
-  }).sort((a,b)=>daysUntil(a.deadline)-daysUntil(b.deadline));
-
-  const al=document.getElementById('home-alert-list');
-  if(alerts.length===0){
-    al.innerHTML='<div style="font-size:13px;color:var(--text-muted)">期限が迫っている支払いはありません</div>';
+  // 分割払い進捗アラート
+  const alerts = purchases.filter(p => p.payType === 'install' && !installAllDone(p));
+  const al = document.getElementById('home-alert-list');
+  if (!alerts.length) {
+    al.innerHTML = '<div style="font-size:13px;color:var(--text-muted)">未完了の分割払いはありません</div>';
   } else {
-    al.innerHTML=alerts.map(p=>{
-      const d=daysUntil(p.deadline);
+    al.innerHTML = alerts.slice(0,3).map(p => {
+      const paidN = installPaidCount(p);
+      const rem = installRemaining(p);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border)">
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
-          <div style="font-size:12px;color:var(--text-muted)">${p.deadline}</div>
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+          <div style="font-size:12px;color:var(--text-muted)">残${rem}回 ・ ${fmt(rem * Math.round(p.price / p.installCount))}</div>
         </div>
-        <div style="text-align:right;margin-left:10px">${deadlineChip(d)}<div style="font-size:13px;font-weight:600;color:var(--primary-dark);margin-top:2px">${fmt(p.price)}</div></div>
+        <div style="text-align:right;margin-left:10px">
+          <span class="chip chip-blue">${paidN}/${p.installCount}回済</span>
+          <div style="font-size:13px;font-weight:600;color:var(--primary-dark);margin-top:2px">${fmt(p.price)}</div>
+        </div>
       </div>`;
     }).join('');
   }
 
-  const breakdown=document.getElementById('home-breakdown');
-  const ym=thisMonth();
-  const items=purchases.filter(p=>(p.date||'').slice(0,7)===ym||
-    (p.payType!=='lump'&&p.deadline));
-  if(!items.length){
-    breakdown.innerHTML='<div style="font-size:13px;color:var(--text-muted)">今月の支払い予定はありません</div>';
+  // 今月の内訳
+  const breakdown = document.getElementById('home-breakdown');
+  const ym = thisMonth();
+  const items = purchases.filter(p => (p.date || '').slice(0,7) === ym || p.payType !== 'lump');
+  if (!items.length) {
+    breakdown.innerHTML = '<div style="font-size:13px;color:var(--text-muted)">今月の支払い予定はありません</div>';
     return;
   }
-  breakdown.innerHTML=items.slice(0,5).map(p=>{
-    const isInstall=p.payType==='install';
-    const paidN=isInstall?installPaidCount(p):0;
-    const statusLabel=isInstall
-      ?`${paidN}/${p.installCount}回済`
-      :(p.paid?'済':'未払');
-    const statusColor=isInstall?(installAllDone(p)?'green':paidN>0?'blue':'gray'):(p.paid?'green':'gray');
-    return `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:0.5px solid var(--border)">
+  breakdown.innerHTML = items.slice(0,5).map(p => {
+    const isInstall = p.payType === 'install';
+    const paidN = isInstall ? installPaidCount(p) : 0;
+    const statusLabel = isInstall ? `${paidN}/${p.installCount}回済` : (p.paid ? '済' : '未払');
+    const statusColor = isInstall ? (installAllDone(p) ? 'green' : paidN > 0 ? 'blue' : 'gray') : (p.paid ? 'green' : 'gray');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:0.5px solid var(--border)">
       <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${p.name}</div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
         <span class="chip chip-${statusColor}">${statusLabel}</span>
         <span style="font-size:13px;font-weight:500">${fmt(monthlyAmt(p))}</span>
       </div>
     </div>`;
-  }).join('')+(items.length>5?`<div style="font-size:12px;color:var(--text-muted);margin-top:6px">他${items.length-5}件</div>`:'');
+  }).join('') + (items.length > 5 ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px">他${items.length-5}件</div>` : '');
 }
 
-/* ---- SELECTS ---- */
-function populateSelects(){
-  ['i-cat','f-cat'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(!el)return;
-    const blank=id.startsWith('f')?'<option value="">すべてのカテゴリ</option>':'<option value="">選択してください</option>';
-    el.innerHTML=blank+categories.map(c=>`<option>${c}</option>`).join('');
+/* ---- プルダウン ---- */
+function populateSelects() {
+  ['i-cat','f-cat'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    const blank = id.startsWith('f') ? '<option value="">すべてのカテゴリ</option>' : '<option value="">選択してください</option>';
+    el.innerHTML = blank + categories.map(c => `<option>${c}</option>`).join('');
   });
-  ['i-site','f-site'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(!el)return;
-    const blank=id.startsWith('f')?'<option value="">すべてのサイト</option>':'<option value="">選択してください</option>';
-    el.innerHTML=blank+sites.map(s=>`<option>${s}</option>`).join('');
+  ['i-site','f-site'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    const blank = id.startsWith('f') ? '<option value="">すべてのサイト</option>' : '<option value="">選択してください</option>';
+    el.innerHTML = blank + sites.map(s => `<option>${s}</option>`).join('');
   });
 }
 
-function populateFilters(){
+function populateFilters() {
   populateSelects();
-  const months=new Set(purchases.map(p=>(p.date||'').slice(0,7)).filter(Boolean));
-  const cur=thisMonth();
-  months.add(cur);
-  const sorted=[...months].sort().reverse();
-  const el=document.getElementById('f-month');
-  el.innerHTML=sorted.map(m=>`<option value="${m}"${m===cur?' selected':''}>${m.replace('-','年')}月</option>`).join('');
+  const months = new Set(purchases.map(p => (p.date || '').slice(0,7)).filter(Boolean));
+  months.add(thisMonth());
+  const el = document.getElementById('f-month');
+  el.innerHTML = [...months].sort().reverse().map(m =>
+    `<option value="${m}"${m === thisMonth() ? ' selected' : ''}>${m.replace('-','年')}月</option>`
+  ).join('');
 }
 
-function populateStatsFilter(){
-  const months=new Set(purchases.map(p=>(p.date||'').slice(0,7)).filter(Boolean));
-  const cur=thisMonth();months.add(cur);
-  const sorted=[...months].sort().reverse();
-  const el=document.getElementById('s-month');
-  el.innerHTML=sorted.map(m=>`<option value="${m}"${m===cur?' selected':''}>${m.replace('-','年')}月</option>`).join('');
+function populateStatsFilter() {
+  const months = new Set(purchases.map(p => (p.date || '').slice(0,7)).filter(Boolean));
+  months.add(thisMonth());
+  const el = document.getElementById('s-month');
+  el.innerHTML = [...months].sort().reverse().map(m =>
+    `<option value="${m}"${m === thisMonth() ? ' selected' : ''}>${m.replace('-','年')}月</option>`
+  ).join('');
 }
 
-/* ---- INPUT ---- */
-function onPayChange(){
-  const v=document.getElementById('i-pay').value;
-  document.getElementById('install-box').classList.toggle('show',v==='install');
-  document.getElementById('revo-box').style.display=v==='revo'?'block':'none';
+/* ---- 入力フォーム ---- */
+function onPayChange() {
+  const v = document.getElementById('i-pay').value;
+  document.getElementById('install-box').classList.toggle('show', v === 'install');
+  document.getElementById('revo-box').style.display = v === 'revo' ? 'block' : 'none';
+  if (!document.getElementById('i-paystart').value)
+    document.getElementById('i-paystart').value = thisMonth();
   calcMonthly();
 }
-function calcMonthly(){
-  const price=parseFloat(document.getElementById('i-price').value)||0;
-  const cnt=parseInt(document.getElementById('i-installcount').value)||1;
-  document.getElementById('monthly-calc').textContent=fmt(Math.round(price/cnt));
+
+function calcMonthly() {
+  const price = parseFloat(document.getElementById('i-price').value) || 0;
+  const cnt   = parseInt(document.getElementById('i-installcount').value) || 1;
+  const monthly = Math.round(price / cnt);
+  document.getElementById('monthly-calc').textContent = fmt(monthly);
+  const preview = document.getElementById('install-schedule-preview');
+  if (!preview) return;
+  const paystart = document.getElementById('i-paystart').value || thisMonth();
+  if (price && cnt && document.getElementById('i-pay').value === 'install') {
+    const [y, m] = paystart.split('-').map(Number);
+    const end = new Date(y, m - 1 + cnt - 1, 1);
+    preview.textContent = `${paystart.replace('-','年')}月 〜 ${end.getFullYear()}年${end.getMonth()+1}月（${cnt}回）・月々 ${fmt(monthly)}`;
+  } else {
+    preview.textContent = '';
+  }
 }
 
-function renderDeadlinePreview(){
-  const val=document.getElementById('i-deadline').value;
-  const prev=document.getElementById('deadline-preview');
-  if(!val){prev.style.display='none';return;}
-  prev.style.display='block';
-  const days=daysUntil(val);
-  let color='#1D9E75',pct=Math.max(3,Math.min(100,100-days/30*100));
-  if(days<0){color='#A32D2D';pct=3;}
-  else if(days<=7)color='#BA7517';
-  else if(days<=14)color='#D85A30';
-  document.getElementById('dl-label-left').textContent=val;
-  document.getElementById('dl-label-right').textContent=
-    days<0?`${Math.abs(days)}日超過`:(days===0?'本日期限':`残${days}日`);
-  document.getElementById('dl-bar-fill').style.cssText=`width:${pct}%;background:${color}`;
-}
+function renderDeadlinePreview() { /* 期限欄は削除済み */ }
 
-function addPurchase(){
-  const name=document.getElementById('i-name').value.trim();
-  const cat=document.getElementById('i-cat').value;
-  const price=parseFloat(document.getElementById('i-price').value)||0;
-  const site=document.getElementById('i-site').value;
-  const date=document.getElementById('i-date').value;
-  const payType=document.getElementById('i-pay').value;
-  const installCount=parseInt(document.getElementById('i-installcount').value)||12;
-  const revoAmt=parseFloat(document.getElementById('i-revo').value)||0;
-  const deadline=document.getElementById('i-deadline').value;
-  const memo=document.getElementById('i-memo').value.trim();
+function addPurchase() {
+  const name    = document.getElementById('i-name').value.trim();
+  const cat     = document.getElementById('i-cat').value;
+  const price   = parseFloat(document.getElementById('i-price').value) || 0;
+  const site    = document.getElementById('i-site').value;
+  const date    = document.getElementById('i-date').value;
+  const release = document.getElementById('i-release').value;
+  const payType = document.getElementById('i-pay').value;
+  const paystart     = document.getElementById('i-paystart').value || thisMonth();
+  const installCount = parseInt(document.getElementById('i-installcount').value) || 12;
+  const revoAmt      = parseFloat(document.getElementById('i-revo').value) || 0;
+  const memo    = document.getElementById('i-memo').value.trim();
 
-  if(!name){toast('商品名を入力してください');return;}
-  if(!cat){toast('カテゴリを選択してください');return;}
-  if(!price){toast('金額を入力してください');return;}
-  if(!site){toast('購入サイトを選択してください');return;}
-  if(!date){toast('購入日を入力してください');return;}
+  if (!name)  { toast('商品名を入力してください'); return; }
+  if (!cat)   { toast('カテゴリを選択してください'); return; }
+  if (!price) { toast('金額を入力してください'); return; }
+  if (!site)  { toast('購入サイトを選択してください'); return; }
+  if (!date)  { toast('購入日を入力してください'); return; }
 
-  purchases.unshift({id:Date.now(),name,cat,price,site,date,payType,installCount,revoAmt,deadline,memo,paid:false});
+  purchases.unshift({
+    id: Date.now(), name, cat, price, site, date, release,
+    payType, paystart, installCount, revoAmt, memo, paid: false
+  });
   save();
 
-  document.getElementById('i-name').value='';
-  document.getElementById('i-cat').value='';
-  document.getElementById('i-price').value='';
-  document.getElementById('i-site').value='';
-  document.getElementById('i-deadline').value='';
-  document.getElementById('i-memo').value='';
-  document.getElementById('i-pay').value='lump';
+  ['i-name','i-price','i-release','i-memo','i-paystart'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('i-cat').value = '';
+  document.getElementById('i-site').value = '';
+  document.getElementById('i-date').value = today();
+  document.getElementById('i-pay').value = 'lump';
   document.getElementById('install-box').classList.remove('show');
-  document.getElementById('deadline-preview').style.display='none';
+  const prev = document.getElementById('install-schedule-preview');
+  if (prev) prev.textContent = '';
 
   toast('追加しました！');
   checkBudgetAlert();
 }
 
-function checkBudgetAlert(){
-  if(!settings.notifBudget||!settings.budget)return;
-  const plan=thisMonthPlan();
-  if(plan>=settings.budget)toast('⚠ 月間予算を超過しています！');
-  else if(plan>=settings.budget*.8)toast('⚠ 月間予算の80%に達しています');
+function checkBudgetAlert() {
+  if (!settings.notifBudget || !settings.budget) return;
+  const plan = thisMonthPlan();
+  if (plan >= settings.budget) toast('⚠ 月間予算を超過しています！');
+  else if (plan >= settings.budget * .8) toast('⚠ 月間予算の80%に達しています');
 }
 
-/* ---- LIST ---- */
-function renderList(){
-  const ym=document.getElementById('f-month')?.value||thisMonth();
-  const fc=document.getElementById('f-cat')?.value||'';
-  const fs=document.getElementById('f-site')?.value||'';
-  const fp=document.getElementById('f-paid')?.value||'';
+/* ---- 一覧 ---- */
+function renderList() {
+  const ym = document.getElementById('f-month')?.value || thisMonth();
+  const fc = document.getElementById('f-cat')?.value  || '';
+  const fs = document.getElementById('f-site')?.value || '';
+  const fp = document.getElementById('f-paid')?.value || '';
 
-  let items=purchases.filter(p=>{
-    if(fc&&p.cat!==fc)return false;
-    if(fs&&p.site!==fs)return false;
-    if((p.date||'').slice(0,7)!==ym)return false;
-    if(fp==='paid'&&!p.paid)return false;
-    if(fp==='unpaid'&&p.paid)return false;
+  const items = purchases.filter(p => {
+    if (fc && p.cat !== fc) return false;
+    if (fs && p.site !== fs) return false;
+    if ((p.date || '').slice(0,7) !== ym) return false;
+    if (fp === 'paid'   && !p.paid) return false;
+    if (fp === 'unpaid' &&  p.paid) return false;
     return true;
   });
 
-  const el=document.getElementById('list-items');
-  if(!items.length){
-    el.innerHTML='<div class="empty"><div class="empty-icon">🗂</div><div>この月の記録はありません</div></div>';
+  const el = document.getElementById('list-items');
+  if (!items.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🗂</div><div>この月の記録はありません</div></div>';
     return;
   }
 
-  el.innerHTML=items.map(p=>{
-    const days=daysUntil(p.deadline);
-    const icon=CAT_ICONS[p.cat]||'📦';
-    const isInstall=p.payType==='install';
-    const paidN=isInstall?installPaidCount(p):0;
-    const remaining=isInstall?installRemaining(p):0;
-    const monthly=isInstall?Math.round(p.price/p.installCount):0;
-    const allDone=isInstall?installAllDone(p):p.paid;
+  el.innerHTML = items.map(p => {
+    const icon      = CAT_ICONS[p.cat] || '📦';
+    const isInstall = p.payType === 'install';
+    const paidN     = isInstall ? installPaidCount(p) : 0;
+    const remaining = isInstall ? installRemaining(p) : 0;
+    const monthly   = isInstall ? Math.round(p.price / p.installCount) : 0;
+    const allDone   = isInstall ? installAllDone(p) : p.paid;
 
-    const installSection=isInstall?`
+    const installSection = isInstall ? `
       <div style="padding:0 14px 12px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-size:12px;font-weight:500;color:var(--text-muted)">分割進捗</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-size:12px;color:var(--text-muted)">支払い開始: ${(p.paystart||(p.date||thisMonth()).slice(0,7)).replace('-','年')}月〜</span>
           <span style="font-size:12px;font-weight:600;color:${allDone?'var(--teal)':'var(--primary-dark)'}">
-            ${paidN}/${p.installCount}回済 ・ 残${fmt(remaining*monthly)}
+            ${paidN}/${p.installCount}回済 ・ 残${fmt(remaining * monthly)}
           </span>
         </div>
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
-          ${Array.from({length:p.installCount},(_,i)=>{
-            const done=(p.installPaid||[])[i];
-            return `<button onclick="toggleInstallment(${p.id},${i})" style="
-              width:28px;height:28px;border-radius:6px;border:1.5px solid ${done?'var(--teal)':'var(--border)'};
-              background:${done?'var(--teal-light)':'var(--card)'};color:${done?'var(--teal)':'var(--text-muted)'};
-              font-size:11px;font-weight:600;cursor:pointer;line-height:1;
-            ">${done?'✓':i+1}</button>`;
+          ${Array.from({length: p.installCount}, (_, i) => {
+            const done = (p.installPaid || [])[i];
+            const start = p.paystart || (p.date || thisMonth()).slice(0,7);
+            const [sy, sm] = start.split('-').map(Number);
+            const d = new Date(sy, sm - 1 + i, 1);
+            const lbl = `${d.getMonth()+1}月`;
+            return `<button onclick="toggleInstallment(${p.id},${i})" title="${d.getFullYear()}年${d.getMonth()+1}月" style="min-width:32px;height:32px;border-radius:6px;border:1.5px solid ${done?'var(--teal)':'var(--border)'};background:${done?'var(--teal-light)':'var(--card)'};color:${done?'var(--teal)':'var(--text-muted)'};font-size:10px;font-weight:600;cursor:pointer;padding:0 4px;">${done?'✓':lbl}</button>`;
           }).join('')}
         </div>
         <div style="height:6px;border-radius:99px;background:var(--border);overflow:hidden;">
           <div style="height:100%;border-radius:99px;background:var(--teal);width:${Math.round(paidN/p.installCount*100)}%;transition:width .3s;"></div>
         </div>
-      </div>`:'';
+      </div>` : '';
 
-    const actionBtn=isInstall
-      ?`<span class="chip chip-${allDone?'green':paidN>0?'blue':'gray'}">${allDone?'完済':paidN>0?`${paidN}回済`:'未払い'}</span>`
-      :`<button class="btn-sm ${p.paid?'btn-success-sm':''}" onclick="togglePaid(${p.id})">${p.paid?'✓ 支払い済み':'支払い済みにする'}</button>`;
+    const actionBtn = isInstall
+      ? `<span class="chip chip-${allDone?'green':paidN>0?'blue':'gray'}">${allDone?'完済':paidN>0?`${paidN}回済`:'未払い'}</span>`
+      : `<button class="btn-sm ${p.paid?'btn-success-sm':''}" onclick="togglePaid(${p.id})">${p.paid?'✓ 支払い済み':'支払い済みにする'}</button>`;
 
     return `<div class="purchase-item" id="pi-${p.id}">
       <div class="pi-header">
@@ -981,130 +997,95 @@ function renderList(){
         <div class="pi-info">
           <div class="pi-name">${p.name}</div>
           <div class="pi-meta">${p.cat} ・ ${p.site}</div>
+          <div class="pi-meta" style="margin-top:2px;">
+            <span>購入: ${p.date}</span>
+            ${p.release ? `<span style="margin-left:8px;">発売: ${p.release}</span>` : ''}
+          </div>
         </div>
         <div class="pi-right">
           <div class="pi-price">${fmt(p.price)}</div>
           <div style="font-size:11px;color:var(--text-muted)">${isInstall?`月々${fmt(monthly)}`:payLabel(p)}</div>
         </div>
       </div>
-      ${p.deadline?`<div class="pi-bar-wrap">
-        <div class="deadline-label-row"><span style="font-size:11px;color:var(--text-muted)">期限: ${p.deadline}</span><span style="font-size:11px">${days!==null?(days<0?`超過${Math.abs(days)}日`:`残${days}日`):''}</span></div>
-        <div class="deadline-bar-track"><div class="deadline-bar-fill" style="width:${days!==null?Math.max(3,Math.min(100,days<0?0:Math.round(100-days/30*100))):50}%;background:${days!==null&&days<0?'#A32D2D':days!==null&&days<=7?'#BA7517':'#1D9E75'}"></div></div>
-      </div>`:''}
       ${installSection}
       <div class="pi-actions">
         ${actionBtn}
         <button class="btn-sm" onclick="editPurchase(${p.id})">編集</button>
         <button class="btn-sm btn-danger-sm" onclick="deletePurchase(${p.id})">削除</button>
-        ${!isInstall?(p.paid?`<span class="chip chip-green">済</span>`:deadlineChip(days)):''}
+        ${!isInstall ? (p.paid ? '<span class="chip chip-green">済</span>' : '') : ''}
       </div>
     </div>`;
   }).join('');
 }
 
-function togglePaid(id){
-  const p=purchases.find(x=>x.id===id);
-  if(!p)return;
-  p.paid=!p.paid;
-  save();
-  renderList();
-  renderHome();
-  toast(p.paid?'支払い済みにしました':'未払いに戻しました');
+function togglePaid(id) {
+  const p = purchases.find(x => x.id === id); if (!p) return;
+  p.paid = !p.paid; save(); renderList(); renderHome();
+  toast(p.paid ? '支払い済みにしました' : '未払いに戻しました');
 }
 
-function toggleInstallment(id,idx){
-  const p=purchases.find(x=>x.id===id);
-  if(!p)return;
-  if(!p.installPaid)p.installPaid=Array(p.installCount).fill(false);
-  p.installPaid[idx]=!p.installPaid[idx];
-  p.paid=installAllDone(p);
-  save();
-  renderList();
-  renderHome();
-  const paidN=installPaidCount(p);
-  if(p.paid)toast('全回分の支払いが完了しました！');
-  else toast(`${paidN}/${p.installCount}回目を${p.installPaid[idx]?'支払い済み':'未払い'}にしました`);
+function toggleInstallment(id, idx) {
+  const p = purchases.find(x => x.id === id); if (!p) return;
+  if (!p.installPaid) p.installPaid = Array(p.installCount).fill(false);
+  p.installPaid[idx] = !p.installPaid[idx];
+  p.paid = installAllDone(p);
+  save(); renderList(); renderHome();
+  toast(installAllDone(p) ? '全回分の支払いが完了しました！'
+    : `${p.installPaid[idx]?'支払い済み':'未払い'}にしました`);
 }
 
-function deletePurchase(id){
-  if(!confirm('この記録を削除しますか？'))return;
-  purchases=purchases.filter(p=>p.id!==id);
-  save();
-  renderList();
-  renderHome();
+function deletePurchase(id) {
+  if (!confirm('この記録を削除しますか？')) return;
+  purchases = purchases.filter(p => p.id !== id);
+  save(); renderList(); renderHome();
   toast('削除しました');
 }
 
-function editPurchase(id){
-  const p=purchases.find(x=>x.id===id);
-  if(!p)return;
-  const catOpts=categories.map(c=>`<option value="${c}"${p.cat===c?' selected':''}>${c}</option>`).join('');
-  const siteOpts=sites.map(s=>`<option value="${s}"${p.site===s?' selected':''}>${s}</option>`).join('');
-  document.getElementById('modal-content').innerHTML=`
+/* ---- 編集モーダル ---- */
+function editPurchase(id) {
+  const p = purchases.find(x => x.id === id); if (!p) return;
+  const catOpts  = categories.map(c => `<option value="${c}"${p.cat===c?' selected':''}>${c}</option>`).join('');
+  const siteOpts = sites.map(s => `<option value="${s}"${p.site===s?' selected':''}>${s}</option>`).join('');
+  document.getElementById('modal-content').innerHTML = `
     <button class="modal-close" onclick="closeModal()">×</button>
     <div class="modal-title">記録を編集</div>
     <div style="display:flex;flex-direction:column;gap:10px;">
-      <div class="field" style="margin:0">
-        <label>商品名</label>
-        <input type="text" id="e-name" value="${p.name.replace(/"/g,'&quot;')}">
+      <div class="field" style="margin:0"><label>商品名</label>
+        <input type="text" id="e-name" value="${p.name.replace(/"/g,'&quot;')}"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="field" style="margin:0"><label>カテゴリ</label><select id="e-cat">${catOpts}</select></div>
+        <div class="field" style="margin:0"><label>金額（円）</label><input type="number" id="e-price" value="${p.price}" inputmode="numeric"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="field" style="margin:0">
-          <label>カテゴリ</label>
-          <select id="e-cat">${catOpts}</select>
-        </div>
-        <div class="field" style="margin:0">
-          <label>金額（円）</label>
-          <input type="number" id="e-price" value="${p.price}" inputmode="numeric">
-        </div>
+        <div class="field" style="margin:0"><label>購入サイト</label><select id="e-site">${siteOpts}</select></div>
+        <div class="field" style="margin:0"><label>購入日</label><input type="date" id="e-date" value="${p.date||''}"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="field" style="margin:0">
-          <label>購入サイト</label>
-          <select id="e-site">${siteOpts}</select>
-        </div>
-        <div class="field" style="margin:0">
-          <label>購入日</label>
-          <input type="date" id="e-date" value="${p.date||''}">
-        </div>
+        <div class="field" style="margin:0"><label>発売日（任意）</label><input type="date" id="e-release" value="${p.release||''}"></div>
+        <div class="field" style="margin:0"><label>支払い状況</label>
+          <select id="e-paid">
+            <option value="0"${!p.paid?' selected':''}>未払い</option>
+            <option value="1"${ p.paid?' selected':''}>支払い済み</option>
+          </select></div>
       </div>
-      <div class="field" style="margin:0">
-        <label>支払い方法</label>
+      <div class="field" style="margin:0"><label>支払い方法</label>
         <select id="e-pay" onchange="editPayChange()">
           <option value="lump"${p.payType==='lump'?' selected':''}>一括払い</option>
           <option value="install"${p.payType==='install'?' selected':''}>分割払い</option>
           <option value="revo"${p.payType==='revo'?' selected':''}>リボ払い</option>
-        </select>
-      </div>
+        </select></div>
+      <div class="field" style="margin:0"><label>支払い開始月</label>
+        <input type="month" id="e-paystart" value="${p.paystart||(p.date||'').slice(0,7)||''}"></div>
       <div id="e-install-box" style="display:${p.payType==='install'?'grid':'none'};grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="field" style="margin:0">
-          <label>分割回数</label>
-          <input type="number" id="e-installcount" value="${p.installCount||12}" min="2" max="60">
-        </div>
+        <div class="field" style="margin:0"><label>分割回数</label>
+          <input type="number" id="e-installcount" value="${p.installCount||12}" min="2" max="60"></div>
       </div>
       <div id="e-revo-box" style="display:${p.payType==='revo'?'block':'none'};">
-        <div class="field" style="margin:0">
-          <label>月々の支払額（円）</label>
-          <input type="number" id="e-revo" value="${p.revoAmt||0}">
-        </div>
+        <div class="field" style="margin:0"><label>月々の支払額（円）</label>
+          <input type="number" id="e-revo" value="${p.revoAmt||0}"></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="field" style="margin:0">
-          <label>支払い期限</label>
-          <input type="date" id="e-deadline" value="${p.deadline||''}">
-        </div>
-        <div class="field" style="margin:0">
-          <label>支払い状況</label>
-          <select id="e-paid">
-            <option value="0"${!p.paid?' selected':''}>未払い</option>
-            <option value="1"${p.paid?' selected':''}>支払い済み</option>
-          </select>
-        </div>
-      </div>
-      <div class="field" style="margin:0">
-        <label>メモ</label>
-        <input type="text" id="e-memo" value="${(p.memo||'').replace(/"/g,'&quot;')}" placeholder="任意">
-      </div>
+      <div class="field" style="margin:0"><label>メモ</label>
+        <input type="text" id="e-memo" value="${(p.memo||'').replace(/"/g,'&quot;')}" placeholder="任意"></div>
       <div style="display:flex;gap:8px;margin-top:4px;">
         <button class="btn btn-primary" style="flex:1" onclick="saveEdit(${p.id})">保存する</button>
         <button class="btn-sm" style="padding:12px 16px;" onclick="closeModal()">キャンセル</button>
@@ -1113,229 +1094,220 @@ function editPurchase(id){
   document.getElementById('modal-backdrop').classList.add('show');
 }
 
-function editPayChange(){
-  const v=document.getElementById('e-pay').value;
-  document.getElementById('e-install-box').style.display=v==='install'?'grid':'none';
-  document.getElementById('e-revo-box').style.display=v==='revo'?'block':'none';
+function editPayChange() {
+  const v = document.getElementById('e-pay').value;
+  document.getElementById('e-install-box').style.display = v === 'install' ? 'grid' : 'none';
+  document.getElementById('e-revo-box').style.display    = v === 'revo'    ? 'block' : 'none';
 }
 
-function saveEdit(id){
-  const p=purchases.find(x=>x.id===id);
-  if(!p)return;
-  const name=document.getElementById('e-name').value.trim();
-  const price=parseFloat(document.getElementById('e-price').value)||0;
-  if(!name){toast('商品名を入力してください');return;}
-  if(!price){toast('金額を入力してください');return;}
-  p.name=name;
-  p.cat=document.getElementById('e-cat').value;
-  p.price=price;
-  p.site=document.getElementById('e-site').value;
-  p.date=document.getElementById('e-date').value;
-  p.payType=document.getElementById('e-pay').value;
-  p.installCount=parseInt(document.getElementById('e-installcount').value)||12;
-  p.revoAmt=parseFloat(document.getElementById('e-revo').value)||0;
-  p.deadline=document.getElementById('e-deadline').value;
-  p.paid=document.getElementById('e-paid').value==='1';
-  p.memo=document.getElementById('e-memo').value.trim();
-  save();
-  closeModal();
-  renderList();
-  renderHome();
+function saveEdit(id) {
+  const p = purchases.find(x => x.id === id); if (!p) return;
+  const name  = document.getElementById('e-name').value.trim();
+  const price = parseFloat(document.getElementById('e-price').value) || 0;
+  if (!name)  { toast('商品名を入力してください'); return; }
+  if (!price) { toast('金額を入力してください'); return; }
+  p.name         = name;
+  p.cat          = document.getElementById('e-cat').value;
+  p.price        = price;
+  p.site         = document.getElementById('e-site').value;
+  p.date         = document.getElementById('e-date').value;
+  p.release      = document.getElementById('e-release').value;
+  p.payType      = document.getElementById('e-pay').value;
+  p.paystart     = document.getElementById('e-paystart').value || thisMonth();
+  p.installCount = parseInt(document.getElementById('e-installcount').value) || 12;
+  p.revoAmt      = parseFloat(document.getElementById('e-revo').value) || 0;
+  p.paid         = document.getElementById('e-paid').value === '1';
+  p.memo         = document.getElementById('e-memo').value.trim();
+  save(); closeModal(); renderList(); renderHome();
   toast('変更を保存しました');
 }
 
-function closeModal(e){
-  if(!e||e.target===document.getElementById('modal-backdrop'))
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal-backdrop'))
     document.getElementById('modal-backdrop').classList.remove('show');
 }
 
-/* ---- STATS ---- */
-function renderStats(){
-  const ym=document.getElementById('s-month')?.value||thisMonth();
-  const items=purchases.filter(p=>(p.date||'').slice(0,7)===ym);
-  const total=items.reduce((s,p)=>s+p.price,0);
-  const paid=items.filter(p=>p.paid).reduce((s,p)=>s+p.price,0);
-  document.getElementById('s-total').textContent=fmt(total);
-  document.getElementById('s-paid').textContent=fmt(paid);
+/* ---- 統計 ---- */
+function renderStats() {
+  const ym    = document.getElementById('s-month')?.value || thisMonth();
+  const items = purchases.filter(p => (p.date || '').slice(0,7) === ym);
+  const total = items.reduce((s, p) => s + p.price, 0);
+  const paid  = items.filter(p => p.paid).reduce((s, p) => s + p.price, 0);
+  document.getElementById('s-total').textContent = fmt(total);
+  document.getElementById('s-paid').textContent  = fmt(paid);
 
-  const catMap={};
-  items.forEach(p=>catMap[p.cat]=(catMap[p.cat]||0)+p.price);
-  const catLabels=Object.keys(catMap);
-  const catData=catLabels.map(k=>catMap[k]);
+  const catMap = {};
+  items.forEach(p => catMap[p.cat] = (catMap[p.cat] || 0) + p.price);
+  const catLabels = Object.keys(catMap);
+  const catData   = catLabels.map(k => catMap[k]);
 
-  const legend=document.getElementById('cat-legend');
-  legend.innerHTML=catLabels.map((l,i)=>`<div class="legend-item"><div class="legend-dot" style="background:${CHART_COLORS[i%CHART_COLORS.length]}"></div>${l} ${fmt(catData[i])}</div>`).join('');
+  document.getElementById('cat-legend').innerHTML = catLabels.map((l, i) =>
+    `<div class="legend-item"><div class="legend-dot" style="background:${CHART_COLORS[i%CHART_COLORS.length]}"></div>${l} ${fmt(catData[i])}</div>`
+  ).join('');
 
-  if(catChart)catChart.destroy();
-  catChart=new Chart(document.getElementById('catChart'),{
-    type:'doughnut',
-    data:{labels:catLabels,datasets:[{data:catData,backgroundColor:CHART_COLORS,borderWidth:2,borderColor:'transparent'}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmt(ctx.raw)}`}}}}
+  if (catChart) catChart.destroy();
+  catChart = new Chart(document.getElementById('catChart'), {
+    type: 'doughnut',
+    data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: CHART_COLORS, borderWidth: 2, borderColor: 'transparent' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmt(ctx.raw)}` } } } }
   });
 
-  const last6=[];
-  for(let i=5;i>=0;i--){
-    const d=new Date();d.setMonth(d.getMonth()-i);
-    const m=d.toISOString().slice(0,7);
-    const sum=purchases.filter(p=>(p.date||'').slice(0,7)===m).reduce((s,p)=>s+p.price,0);
-    last6.push({m:m.replace('-','年')+'月',v:sum});
+  const last6 = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(); d.setMonth(d.getMonth() - i);
+    const m = d.toISOString().slice(0,7);
+    last6.push({ m: m.replace('-','年')+'月', v: purchases.filter(p => (p.date||'').slice(0,7) === m).reduce((s,p)=>s+p.price,0) });
   }
-  if(trendChart)trendChart.destroy();
-  trendChart=new Chart(document.getElementById('trendChart'),{
-    type:'bar',
-    data:{labels:last6.map(x=>x.m),datasets:[{label:'支出',data:last6.map(x=>x.v),backgroundColor:'#AFA9EC',borderRadius:4}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>fmt(ctx.raw)}}},scales:{y:{ticks:{callback:v=>fmt(v)},grid:{color:'rgba(128,128,128,.1)'}},x:{grid:{display:false},ticks:{autoSkip:false,maxRotation:30,font:{size:10}}}}}
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(document.getElementById('trendChart'), {
+    type: 'bar',
+    data: { labels: last6.map(x=>x.m), datasets: [{ label:'支出', data: last6.map(x=>x.v), backgroundColor:'#AFA9EC', borderRadius:4 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>fmt(ctx.raw)}} }, scales:{ y:{ticks:{callback:v=>fmt(v)},grid:{color:'rgba(128,128,128,.1)'}}, x:{grid:{display:false},ticks:{font:{size:10}}} } }
   });
 
-  const siteMap={};
-  items.forEach(p=>siteMap[p.site]=(siteMap[p.site]||0)+p.price);
-  const siteEl=document.getElementById('site-bars');
-  const maxSite=Math.max(...Object.values(siteMap),1);
-  siteEl.innerHTML=Object.entries(siteMap).sort((a,b)=>b[1]-a[1]).map(([site,amt])=>`
+  const siteMap = {};
+  items.forEach(p => siteMap[p.site] = (siteMap[p.site]||0) + p.price);
+  const maxSite = Math.max(...Object.values(siteMap), 1);
+  document.getElementById('site-bars').innerHTML = Object.entries(siteMap).sort((a,b)=>b[1]-a[1]).map(([site,amt]) => `
     <div style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-        <span>${site}</span><span style="font-weight:500">${fmt(amt)}</span>
-      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>${site}</span><span style="font-weight:500">${fmt(amt)}</span></div>
       <div class="deadline-bar-track"><div class="deadline-bar-fill" style="width:${Math.round(amt/maxSite*100)}%;background:#7F77DD"></div></div>
-    </div>`).join('')||'<div style="font-size:13px;color:var(--text-muted)">データがありません</div>';
+    </div>`).join('') || '<div style="font-size:13px;color:var(--text-muted)">データがありません</div>';
 }
 
-/* ---- SETTINGS ---- */
-function renderSettings(){
-  document.getElementById('notif-toggle').checked=settings.notif;
-  document.getElementById('notif-7').checked=settings.notif7;
-  document.getElementById('notif-1').checked=settings.notif1;
-  document.getElementById('notif-budget').checked=settings.notifBudget;
-  if(settings.budget)document.getElementById('s-budget').value=settings.budget;
+/* ---- 設定 ---- */
+function saveSettings() {
+  settings.notif       = document.getElementById('notif-toggle').checked;
+  settings.notif7      = document.getElementById('notif-7').checked;
+  settings.notif1      = document.getElementById('notif-1').checked;
+  settings.notifBudget = document.getElementById('notif-budget').checked;
+  lss('kakeibo_settings', settings);
+  toast('設定を保存しました');
+}
+
+function saveBudget() {
+  settings.budget = parseInt(document.getElementById('s-budget').value) || 0;
+  lss('kakeibo_settings', settings);
+  renderHome(); toast('予算を保存しました');
+}
+
+function renderSettings() {
+  document.getElementById('notif-toggle').checked  = settings.notif;
+  document.getElementById('notif-7').checked       = settings.notif7;
+  document.getElementById('notif-1').checked       = settings.notif1;
+  document.getElementById('notif-budget').checked  = settings.notifBudget;
+  if (settings.budget) document.getElementById('s-budget').value = settings.budget;
   renderTagLists();
 }
 
-function renderTagLists(){
-  document.getElementById('cat-tags').innerHTML=categories.map(c=>`
-    <div class="tag-item">${c}
-      <button class="tag-del" onclick="deleteCat('${c.replace(/'/g,"\\'")}')" title="削除">×</button>
-    </div>`).join('');
-  document.getElementById('site-tags').innerHTML=sites.map(s=>`
-    <div class="tag-item">${s}
-      <button class="tag-del" onclick="deleteSite('${s.replace(/'/g,"\\'")}')" title="削除">×</button>
-    </div>`).join('');
+function renderTagLists() {
+  document.getElementById('cat-tags').innerHTML = categories.map(c =>
+    `<div class="tag-item">${c}<button class="tag-del" onclick="deleteCat('${c.replace(/'/g,"\\'")}')">×</button></div>`
+  ).join('');
+  document.getElementById('site-tags').innerHTML = sites.map(s =>
+    `<div class="tag-item">${s}<button class="tag-del" onclick="deleteSite('${s.replace(/'/g,"\\'")}')">×</button></div>`
+  ).join('');
   populateSelects();
 }
 
-function addCat(){
-  const v=document.getElementById('new-cat').value.trim();
-  if(!v)return;
-  if(categories.includes(v)){toast('すでに存在します');return;}
-  categories.push(v);lss('kakeibo_cats',categories);
-  document.getElementById('new-cat').value='';
-  renderTagLists();toast('追加しました');
+function addCat() {
+  const v = document.getElementById('new-cat').value.trim(); if (!v) return;
+  if (categories.includes(v)) { toast('すでに存在します'); return; }
+  categories.push(v); lss('kakeibo_cats', categories);
+  document.getElementById('new-cat').value = ''; renderTagLists(); toast('追加しました');
 }
-function deleteCat(c){
-  categories=categories.filter(x=>x!==c);lss('kakeibo_cats',categories);renderTagLists();
+function deleteCat(c) { categories = categories.filter(x => x !== c); lss('kakeibo_cats', categories); renderTagLists(); }
+function addSite() {
+  const v = document.getElementById('new-site').value.trim(); if (!v) return;
+  if (sites.includes(v)) { toast('すでに存在します'); return; }
+  sites.push(v); lss('kakeibo_sites', sites);
+  document.getElementById('new-site').value = ''; renderTagLists(); toast('追加しました');
 }
-function addSite(){
-  const v=document.getElementById('new-site').value.trim();
-  if(!v)return;
-  if(sites.includes(v)){toast('すでに存在します');return;}
-  sites.push(v);lss('kakeibo_sites',sites);
-  document.getElementById('new-site').value='';
-  renderTagLists();toast('追加しました');
-}
-function deleteSite(s){
-  sites=sites.filter(x=>x!==s);lss('kakeibo_sites',sites);renderTagLists();
-}
+function deleteSite(s) { sites = sites.filter(x => x !== s); lss('kakeibo_sites', sites); renderTagLists(); }
 
-function confirmClear(){
-  if(!confirm('すべての購入記録を削除しますか？この操作は元に戻せません。'))return;
-  purchases=[];save();renderHome();toast('全データを削除しました');
+function confirmClear() {
+  if (!confirm('すべての購入記録を削除しますか？この操作は元に戻せません。')) return;
+  purchases = []; save(); renderHome(); toast('全データを削除しました');
 }
 
 /* ---- CSV ---- */
-function exportCSV(){
-  if(!purchases.length){toast('データがありません');return;}
-  const header='商品名,カテゴリ,金額,購入サイト,購入日,支払い方法,分割回数,月々支払い,支払い期限,支払い済み,メモ\n';
-  const rows=purchases.map(p=>[
-    `"${p.name}"`,p.cat,p.price,p.site,p.date,payLabel(p),p.payType==='install'?p.installCount:'',
-    p.payType!=='lump'?monthlyAmt(p):'',p.deadline||'',p.paid?'済':'未',`"${p.memo||''}"`
+function exportCSV() {
+  if (!purchases.length) { toast('データがありません'); return; }
+  const header = '商品名,カテゴリ,金額,購入サイト,購入日,発売日,支払い方法,分割回数,月々支払い,支払い開始月,支払い済み,メモ\n';
+  const rows = purchases.map(p => [
+    `"${p.name}"`, p.cat, p.price, p.site, p.date, p.release||'',
+    payLabel(p), p.payType==='install'?p.installCount:'',
+    p.payType!=='lump'?monthlyAmt(p):'', p.paystart||'',
+    p.paid?'済':'未', `"${p.memo||''}"`
   ].join(',')).join('\n');
-  const blob=new Blob(['\uFEFF'+header+rows],{type:'text/csv;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;a.download=`kakeibo_${thisMonth()}.csv`;a.click();
-  URL.revokeObjectURL(url);
-  toast('CSVをダウンロードしました');
+  const blob = new Blob(['\uFEFF'+header+rows], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=`kakeibo_${thisMonth()}.csv`; a.click();
+  URL.revokeObjectURL(url); toast('CSVをダウンロードしました');
 }
 
-/* ---- NOTIFICATIONS ---- */
-function checkNotifications(){
-  if(!settings.notif)return;
-  purchases.forEach(p=>{
-    if(p.paid||!p.deadline)return;
-    const d=daysUntil(p.deadline);
-    if(d===null)return;
-    const key=`notified_${p.id}`;
-    const already=ls(key,[]);
-    if(settings.notif7&&d===7&&!already.includes(7)){
-      scheduleNotif(p.name,`支払い期限まで7日です（${fmt(p.price)}）`);
-      lss(key,[...already,7]);
-    }
-    if(settings.notif1&&d===1&&!already.includes(1)){
-      scheduleNotif(p.name,`支払い期限は明日です！（${fmt(p.price)}）`);
-      lss(key,[...already,1]);
-    }
-    if(d===0&&!already.includes(0)){
-      scheduleNotif(p.name,`本日が支払い期限です！（${fmt(p.price)}）`);
-      lss(key,[...already,0]);
+/* ---- 通知 ---- */
+function checkNotifications() {
+  if (!settings || !settings.notif) return;
+  purchases.forEach(p => {
+    if (p.paid) return;
+    if (p.payType === 'install') {
+      const ym = thisMonth();
+      const idx = installIndexForMonth(p, ym);
+      if (idx >= 0 && idx < p.installCount && !(p.installPaid||[])[idx]) {
+        const key = `notified_install_${p.id}_${ym}`;
+        if (!ls(key, false)) {
+          scheduleNotif(p.name, `今月の分割払い（${idx+1}回目）${fmt(Math.round(p.price/p.installCount))}が未払いです`);
+          lss(key, true);
+        }
+      }
     }
   });
 }
 
-function scheduleNotif(title,body){
-  if(!('Notification' in window))return;
-  if(Notification.permission==='granted'){
-    new Notification(title,{body,icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="%237F77DD"/><text x="16" y="21" text-anchor="middle" font-size="18">💰</text></svg>'});
-  } else if(Notification.permission!=='denied'){
-    Notification.requestPermission().then(p=>{if(p==='granted')scheduleNotif(title,body);});
+function scheduleNotif(title, body) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    new Notification(title, { body });
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(p => { if (p === 'granted') scheduleNotif(title, body); });
   }
 }
 
-function requestNotifPermission(){
-  if('Notification' in window&&Notification.permission==='default'){
+function requestNotifPermission() {
+  if ('Notification' in window && Notification.permission === 'default')
     Notification.requestPermission();
-  }
 }
 
-async function changePassword(){
-  const oldPw=document.getElementById('s-pw-old').value;
-  const newPw=document.getElementById('s-pw-new').value;
-  const newPw2=document.getElementById('s-pw-new2').value;
-  if(!oldPw||!newPw||!newPw2){toast('すべての欄を入力してください');return;}
-  const oldHash=await sha256(oldPw);
-  const storedHash=localStorage.getItem('kakeibo_custom_hash')||PASS_HASH;
-  if(oldHash!==storedHash){toast('現在のパスワードが違います');return;}
-  if(newPw.length<6){toast('新しいパスワードは6文字以上にしてください');return;}
-  if(newPw!==newPw2){toast('新しいパスワードが一致しません');return;}
-  const newHash=await sha256(newPw);
-  localStorage.setItem('kakeibo_custom_hash',newHash);
-  document.getElementById('s-pw-old').value='';
-  document.getElementById('s-pw-new').value='';
-  document.getElementById('s-pw-new2').value='';
+/* ---- パスワード変更・ログアウト ---- */
+async function changePassword() {
+  const oldPw  = document.getElementById('s-pw-old').value;
+  const newPw  = document.getElementById('s-pw-new').value;
+  const newPw2 = document.getElementById('s-pw-new2').value;
+  if (!oldPw || !newPw || !newPw2) { toast('すべての欄を入力してください'); return; }
+  const oldHash    = await sha256(oldPw);
+  const storedHash = localStorage.getItem('kakeibo_custom_hash') || PASS_HASH;
+  if (oldHash !== storedHash) { toast('現在のパスワードが違います'); return; }
+  if (newPw.length < 6) { toast('6文字以上にしてください'); return; }
+  if (newPw !== newPw2) { toast('新しいパスワードが一致しません'); return; }
+  localStorage.setItem('kakeibo_custom_hash', await sha256(newPw));
+  ['s-pw-old','s-pw-new','s-pw-new2'].forEach(id => document.getElementById(id).value = '');
   toast('パスワードを変更しました');
 }
 
-function doLogout(){
+function doLogout() {
   localStorage.removeItem('kakeibo_session_ts');
-  document.getElementById('app-wrapper').style.display='none';
-  document.getElementById('login-screen').style.display='flex';
-  document.getElementById('pw-input').value='';
-  document.getElementById('login-error').textContent='';
+  document.getElementById('app-wrapper').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('pw-input').value = '';
+  document.getElementById('login-error').textContent = '';
 }
 
-/* ---- BOOT ---- */
-if(isSessionValid()){
+/* ---- 起動 ---- */
+if (isSessionValid()) {
   showApp();
 } else {
-  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('login-screen').style.display = 'flex';
 }
 </script>
 </body>
